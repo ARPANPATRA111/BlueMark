@@ -8,7 +8,8 @@ Production-ready Flutter attendance app that uses BLE proximity for zero-frictio
 - From project root, run `flutter pub get`.
 - Configure Firebase for Android:
   - Create a Firebase project.
-  - Add Android app package and place `google-services.json` in `android/app/`.
+  - Add Android app package and copy `android/app/google-services.example.json` to `android/app/google-services.json`, then replace placeholder values with your Firebase project values.
+  - Keep `android/app/google-services.json` local-only. It is ignored by git.
   - Enable Firestore and Email/Password Auth in Firebase Console.
 - Run `flutter run` on a physical Android device (BLE advertising/scanning is not reliable on emulators).
 - Open app:
@@ -19,6 +20,7 @@ Production-ready Flutter attendance app that uses BLE proximity for zero-frictio
 ## iOS Notes
 
 - Add iOS app in Firebase and place `GoogleService-Info.plist` in `ios/Runner/`.
+- Keep `ios/Runner/GoogleService-Info.plist` local-only. It is ignored by git.
 - Enable Bluetooth background modes in Xcode capabilities:
   - Uses Bluetooth LE accessories.
   - Acts as a Bluetooth LE accessory.

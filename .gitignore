@@ -16,7 +16,6 @@ migrate_working_dir/
 .idea/
 .vscode/
 **/doc/api/
-/Docs
 **/ios/Flutter/.last_build_id
 .dart_tool/
 .flutter-plugins
@@ -35,3 +34,10 @@ linux/flutter/ephemeral/
 macos/Flutter/ephemeral/
 windows/flutter/ephemeral/
 ios/Flutter/ephemeral/
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+**/firebase-adminsdk-*.json
+**/*service-account*.json
+**/*service_account*.json
+**/*.p12
+**/*.pem
