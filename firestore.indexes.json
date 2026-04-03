@@ -1,0 +1,33 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "attendance_receipts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "rollNumber",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "markedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "active_sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

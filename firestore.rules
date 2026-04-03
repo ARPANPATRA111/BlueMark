@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userData() {
+      return isSignedIn()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : null;
+    }
+
+    function hasTenant(tenantId) {
+      return isSignedIn()
+        && userData() != null
+        && userData().tenantId == tenantId
+        && userData().isActive != false;
+    }
+
+    function hasRole(role) {
+      return userData() != null && userData().role == role;
+    }
+
+    function hasAnyRole(roles) {
+      return userData() != null && userData().role in roles;
+    }
+
+    function isSelfUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow create: if isSelfUser(userId) && request.resource.data.uid == request.auth.uid;
+
+      allow read: if isSelfUser(userId)
+        || (resource != null
+          && hasTenant(resource.data.tenantId)
+          && hasRole('admin'));
+
+      allow update: if isSelfUser(userId)
+        || (resource != null
+          && hasTenant(resource.data.tenantId)
+          && hasRole('admin'));
+
+      allow delete: if false;
+    }
+
+    match /tenants/{tenantId} {
+      allow read: if hasTenant(tenantId);
+      allow write: if false;
+
+      match /students/{rollNumber} {
+        allow read: if hasTenant(tenantId)
+          && (
+            hasAnyRole(['admin', 'teacher'])
+            || (hasRole('student') && userData().rollNumber == rollNumber)
+          );
+
+        allow create, update: if hasTenant(tenantId)
+          && (
+            hasAnyRole(['admin', 'teacher'])
+            || (hasRole('student') && request.resource.data.linkedUserId == request.auth.uid)
+          );
+
+        allow delete: if hasTenant(tenantId) && hasRole('admin');
+      }
+
+      match /attendance/{attendanceId} {
+        allow read: if hasTenant(tenantId) && hasAnyRole(['admin', 'teacher']);
+        allow create, update: if hasTenant(tenantId) && hasAnyRole(['admin', 'teacher']);
+        allow delete: if false;
+      }
+
+      match /attendance_receipts/{receiptId} {
+        allow read: if hasTenant(tenantId)
+          && (
+            hasAnyRole(['admin', 'teacher'])
+            || (hasRole('student') && resource.data.rollNumber == userData().rollNumber)
+          );
+
+        allow create, update: if hasTenant(tenantId) && hasAnyRole(['admin', 'teacher']);
+        allow delete: if false;
+      }
+
+      match /active_sessions/{classId} {
+        allow read: if hasTenant(tenantId);
+        allow create, update: if hasTenant(tenantId) && hasAnyRole(['admin', 'teacher']);
+        allow delete: if false;
+      }
+
+      match /classes/{classId} {
+        allow read: if hasTenant(tenantId);
+        allow create, update: if hasTenant(tenantId) && hasAnyRole(['admin', 'teacher']);
+        allow delete: if hasTenant(tenantId) && hasRole('admin');
+      }
+    }
+  }
+}
