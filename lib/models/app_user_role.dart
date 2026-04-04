@@ -1,4 +1,4 @@
-enum AppUserRole { unknown, admin, teacher, student }
+enum AppUserRole { unknown, admin, teacher, pendingTeacher, student }
 
 extension AppUserRoleX on AppUserRole {
   static AppUserRole fromValue(String? value) {
@@ -7,6 +7,8 @@ extension AppUserRoleX on AppUserRole {
         return AppUserRole.admin;
       case 'teacher':
         return AppUserRole.teacher;
+      case 'pendingTeacher':
+        return AppUserRole.pendingTeacher;
       case 'student':
         return AppUserRole.student;
       default:
@@ -20,6 +22,8 @@ extension AppUserRoleX on AppUserRole {
         return 'Institution Admin';
       case AppUserRole.teacher:
         return 'Teacher';
+      case AppUserRole.pendingTeacher:
+        return 'Teacher (Pending Approval)';
       case AppUserRole.student:
         return 'Student';
       case AppUserRole.unknown:

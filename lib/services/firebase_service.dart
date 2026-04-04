@@ -30,6 +30,10 @@ class FirebaseService {
   FirebaseService._();
 
   static final FirebaseService instance = FirebaseService._();
+  static const String demoAdminEmail = 'demo.admin@bluemark.app';
+  static const String demoAdminPassword = 'BlueMark@12345';
+  static const String demoAdminTenantCode = 'DEMO_INSTITUTE';
+  static const String demoAdminName = 'Demo Institute Admin';
 
   bool _enabled = false;
 
@@ -56,10 +60,72 @@ class FirebaseService {
     try {
       await Firebase.initializeApp();
       _enabled = true;
+    } on FirebaseException catch (error, stackTrace) {
+      debugPrint('Firebase init failed: ${error.code} ${error.message}\n$stackTrace');
+      _enabled = false;
     } catch (error, stackTrace) {
       debugPrint('Firebase init skipped: $error\n$stackTrace');
       _enabled = false;
     }
+  }
+
+  Future<void> ensureDummyAdminAccount() async {
+    if (!_enabled) {
+      return;
+    }
+
+    if (FirebaseAuth.instance.currentUser != null) {
+      return;
+    }
+
+    try {
+      final created = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: demoAdminEmail,
+        password: demoAdminPassword,
+      );
+
+      final user = created.user;
+      if (user != null) {
+        await user.updateDisplayName(demoAdminName);
+        await _upsertDummyAdminProfile(user.uid);
+      }
+      await FirebaseAuth.instance.signOut();
+    } on FirebaseAuthException catch (error) {
+      if (error.code == 'email-already-in-use') {
+        try {
+          final existing = await FirebaseAuth.instance.signInWithEmailAndPassword(
+            email: demoAdminEmail,
+            password: demoAdminPassword,
+          );
+          final user = existing.user;
+          if (user != null) {
+            await _upsertDummyAdminProfile(user.uid);
+          }
+          await FirebaseAuth.instance.signOut();
+        } on FirebaseAuthException catch (_) {}
+        return;
+      }
+
+      if (error.code == 'network-request-failed') {
+        return;
+      }
+    }
+  }
+
+  Future<void> _upsertDummyAdminProfile(String uid) {
+    return _userDoc(uid).set(<String, dynamic>{
+      'uid': uid,
+      'tenantId': demoAdminTenantCode,
+      'role': AppUserRole.admin.name,
+      'requestedRole': AppUserRole.admin.name,
+      'teacherApproved': true,
+      'displayName': demoAdminName,
+      'email': demoAdminEmail,
+      'designation': 'System Admin',
+      'isActive': true,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Future<void> signInWithEmailPassword({
@@ -70,10 +136,14 @@ class FirebaseService {
       throw Exception('Firebase is not configured on this build.');
     }
 
-    await FirebaseAuth.instance.signInWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+    } on FirebaseAuthException catch (error) {
+      throw Exception(_friendlyAuthMessage(error, isRegistration: false));
+    }
   }
 
   Future<void> registerWithEmailPassword({
@@ -82,15 +152,27 @@ class FirebaseService {
     required String displayName,
     required String tenantId,
     required AppUserRole role,
+    String? studentRollNumber,
+    String? teacherEmployeeId,
+    String? teacherDepartment,
+    String? adminDesignation,
   }) async {
     if (!_enabled) {
       throw Exception('Firebase is not configured on this build.');
     }
 
-    final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
+    final AppUserRole effectiveRole =
+        role == AppUserRole.teacher ? AppUserRole.pendingTeacher : role;
+
+    final UserCredential credential;
+    try {
+      credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+    } on FirebaseAuthException catch (error) {
+      throw Exception(_friendlyAuthMessage(error, isRegistration: true));
+    }
 
     final user = credential.user;
     if (user == null) {
@@ -105,15 +187,22 @@ class FirebaseService {
     final profile = AppUser(
       uid: user.uid,
       tenantId: normalizedTenant,
-      role: role,
+      role: effectiveRole,
       displayName: displayName.trim(),
       email: email.trim().toLowerCase(),
       createdAt: DateTime.now(),
       isActive: true,
+      requestedRole: role.name,
+      teacherApproved: effectiveRole != AppUserRole.pendingTeacher,
+      rollNumber: studentRollNumber?.trim().toUpperCase(),
+      employeeId: teacherEmployeeId?.trim(),
+      department: teacherDepartment?.trim(),
+      designation: adminDesignation?.trim(),
     );
 
     await _userDoc(user.uid).set(<String, dynamic>{
       ...profile.toJson(),
+      'approvedAt': effectiveRole == AppUserRole.pendingTeacher ? null : FieldValue.serverTimestamp(),
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
@@ -192,10 +281,44 @@ class FirebaseService {
       throw Exception('Only institution admins can modify user roles.');
     }
 
-    await _userDoc(userId).set(<String, dynamic>{
+    final payload = <String, dynamic>{
       'role': role.name,
+      'requestedRole': role == AppUserRole.pendingTeacher ? AppUserRole.teacher.name : role.name,
+      'teacherApproved': role == AppUserRole.teacher,
+      'approvedAt': role == AppUserRole.teacher ? FieldValue.serverTimestamp() : null,
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    };
+
+    await _userDoc(userId).set(payload, SetOptions(merge: true));
+  }
+
+  String _friendlyAuthMessage(
+    FirebaseAuthException error, {
+    required bool isRegistration,
+  }) {
+    switch (error.code) {
+      case 'network-request-failed':
+        return 'Network error occurred. Please check internet access and retry.';
+      case 'invalid-api-key':
+        return 'Firebase API key is invalid for this build. Update local Firebase config.';
+      case 'invalid-credential':
+        return isRegistration
+            ? 'Registration failed due to invalid auth configuration. Contact admin.'
+            : 'Invalid email or password.';
+      case 'user-not-found':
+      case 'wrong-password':
+        return 'Invalid email or password.';
+      case 'email-already-in-use':
+        return 'An account with this email already exists.';
+      case 'weak-password':
+        return 'Password is too weak. Use at least 8 characters.';
+      case 'operation-not-allowed':
+        return 'Email/password auth is disabled in Firebase project settings.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please wait and try again.';
+      default:
+        return error.message ?? 'Authentication failed. Please try again.';
+    }
   }
 
   Future<void> setTenantUserActive({

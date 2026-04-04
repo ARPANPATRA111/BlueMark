@@ -36,6 +36,10 @@ class UserManagementScreen extends ConsumerWidget {
                       Text(user.displayName, style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 2),
                       Text(user.email),
+                      if (user.role == AppUserRole.pendingTeacher) ...[
+                        const SizedBox(height: 6),
+                        const Text('Teacher request is pending admin approval.'),
+                      ],
                       const SizedBox(height: 8),
                       Row(
                         children: [
@@ -51,6 +55,10 @@ class UserManagementScreen extends ConsumerWidget {
                                 DropdownMenuItem(
                                   value: AppUserRole.teacher,
                                   child: Text('Teacher'),
+                                ),
+                                DropdownMenuItem(
+                                  value: AppUserRole.pendingTeacher,
+                                  child: Text('Teacher (Pending Approval)'),
                                 ),
                                 DropdownMenuItem(
                                   value: AppUserRole.student,
@@ -115,6 +123,35 @@ class UserManagementScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
+                      if (canManage && user.role == AppUserRole.pendingTeacher) ...[
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: () async {
+                              try {
+                                await ref.read(firebaseServiceProvider).updateTenantUserRole(
+                                      userId: user.uid,
+                                      role: AppUserRole.teacher,
+                                    );
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Teacher access approved for ${user.displayName}.')),
+                                  );
+                                }
+                              } catch (error) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Failed to approve teacher: $error')),
+                                  );
+                                }
+                              }
+                            },
+                            icon: const Icon(Icons.verified_user_rounded),
+                            label: const Text('Approve Teacher Access'),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

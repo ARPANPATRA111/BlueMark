@@ -28,6 +28,12 @@ class AppUser {
     required this.email,
     required this.createdAt,
     this.isActive = true,
+    this.requestedRole,
+    this.teacherApproved = true,
+    this.rollNumber,
+    this.employeeId,
+    this.department,
+    this.designation,
   });
 
   final String uid;
@@ -37,6 +43,12 @@ class AppUser {
   final String email;
   final DateTime createdAt;
   final bool isActive;
+  final String? requestedRole;
+  final bool teacherApproved;
+  final String? rollNumber;
+  final String? employeeId;
+  final String? department;
+  final String? designation;
 
   AppUser copyWith({
     String? uid,
@@ -46,6 +58,12 @@ class AppUser {
     String? email,
     DateTime? createdAt,
     bool? isActive,
+    String? requestedRole,
+    bool? teacherApproved,
+    String? rollNumber,
+    String? employeeId,
+    String? department,
+    String? designation,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -55,6 +73,12 @@ class AppUser {
       email: email ?? this.email,
       createdAt: createdAt ?? this.createdAt,
       isActive: isActive ?? this.isActive,
+      requestedRole: requestedRole ?? this.requestedRole,
+      teacherApproved: teacherApproved ?? this.teacherApproved,
+      rollNumber: rollNumber ?? this.rollNumber,
+      employeeId: employeeId ?? this.employeeId,
+      department: department ?? this.department,
+      designation: designation ?? this.designation,
     );
   }
 
@@ -67,6 +91,12 @@ class AppUser {
       'email': email,
       'createdAt': createdAt.toIso8601String(),
       'isActive': isActive,
+      'requestedRole': requestedRole,
+      'teacherApproved': teacherApproved,
+      'rollNumber': rollNumber,
+      'employeeId': employeeId,
+      'department': department,
+      'designation': designation,
     };
   }
 
@@ -79,6 +109,12 @@ class AppUser {
       email: (json['email'] ?? '').toString(),
       createdAt: _parseDate(json['createdAt']),
       isActive: json['isActive'] != false,
+      requestedRole: json['requestedRole']?.toString(),
+      teacherApproved: json['teacherApproved'] != false,
+      rollNumber: json['rollNumber']?.toString(),
+      employeeId: json['employeeId']?.toString(),
+      department: json['department']?.toString(),
+      designation: json['designation']?.toString(),
     );
   }
 }

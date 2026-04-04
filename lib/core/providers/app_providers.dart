@@ -62,6 +62,7 @@ final appBootstrapProvider = FutureProvider<void>((ref) async {
   await hive.init();
   await settings.init();
   await firebase.init();
+  await firebase.ensureDummyAdminAccount();
   await notifications.init();
   await repository.startAutoSync();
 });

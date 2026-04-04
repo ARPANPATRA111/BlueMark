@@ -51,6 +51,8 @@ class _RoleRouter extends ConsumerWidget {
           return const TeacherHomeScreen();
         case AppUserRole.teacher:
           return const TeacherHomeScreen();
+        case AppUserRole.pendingTeacher:
+          return const _TeacherApprovalPendingScreen();
         case AppUserRole.student:
           return const StudentScreen();
         case AppUserRole.unknown:
@@ -77,6 +79,8 @@ class _RoleRouter extends ConsumerWidget {
                 return const AdminHomeScreen();
               case AppUserRole.teacher:
                 return const TeacherHomeScreen();
+              case AppUserRole.pendingTeacher:
+                return const _TeacherApprovalPendingScreen();
               case AppUserRole.student:
                 return const StudentScreen();
               case AppUserRole.unknown:
@@ -139,6 +143,44 @@ class _LoadingScreen extends StatelessWidget {
     return const Scaffold(
       body: Center(
         child: CircularProgressIndicator(),
+      ),
+    );
+  }
+}
+
+class _TeacherApprovalPendingScreen extends ConsumerWidget {
+  const _TeacherApprovalPendingScreen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.pending_actions_rounded, size: 46),
+              const SizedBox(height: 12),
+              Text(
+                'Teacher access pending approval',
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Your account was created successfully. Please ask your institution admin to approve your teacher request from User Management.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: () => ref.read(firebaseServiceProvider).signOut(),
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('Sign Out'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
