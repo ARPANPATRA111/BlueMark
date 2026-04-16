@@ -5,6 +5,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Cache the user doc read in a local variable to avoid redundant reads.
     function userData() {
       return isSignedIn()
         ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
@@ -12,26 +13,43 @@ service cloud.firestore {
     }
 
     function hasTenant(tenantId) {
+      let user = userData();
       return isSignedIn()
-        && userData() != null
-        && userData().tenantId == tenantId
-        && userData().isActive != false;
+        && user != null
+        && user.tenantId == tenantId
+        && user.isActive != false;
     }
 
     function hasRole(role) {
-      return userData() != null && userData().role == role;
+      let user = userData();
+      return user != null && user.role == role;
     }
 
     function hasAnyRole(roles) {
-      return userData() != null && userData().role in roles;
+      let user = userData();
+      return user != null && user.role in roles;
     }
 
     function isSelfUser(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isActiveRole(roles) {
+      let user = userData();
+      return user != null
+        && user.role in roles
+        && user.isActive != false;
+    }
+
     match /users/{userId} {
-      allow create: if isSelfUser(userId) && request.resource.data.uid == request.auth.uid;
+      allow create: if isSelfUser(userId)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasAll(['uid', 'tenantId', 'role', 'email', 'displayName'])
+        && request.resource.data.tenantId is string
+        && request.resource.data.tenantId.size() > 0
+        && request.resource.data.tenantId.size() <= 50
+        && request.resource.data.email is string
+        && request.resource.data.displayName is string;
 
       allow read: if isSelfUser(userId)
         || (resource != null
@@ -53,13 +71,13 @@ service cloud.firestore {
       match /students/{rollNumber} {
         allow read: if hasTenant(tenantId)
           && (
-            hasAnyRole(['admin', 'teacher'])
+            isActiveRole(['admin', 'teacher'])
             || (hasRole('student') && userData().rollNumber == rollNumber)
           );
 
         allow create, update: if hasTenant(tenantId)
           && (
-            hasAnyRole(['admin', 'teacher'])
+            isActiveRole(['admin', 'teacher'])
             || (hasRole('student') && request.resource.data.linkedUserId == request.auth.uid)
           );
 
@@ -67,31 +85,36 @@ service cloud.firestore {
       }
 
       match /attendance/{attendanceId} {
-        allow read: if hasTenant(tenantId) && hasAnyRole(['admin', 'teacher']);
-        allow create, update: if hasTenant(tenantId) && hasAnyRole(['admin', 'teacher']);
+        allow read: if hasTenant(tenantId) && isActiveRole(['admin', 'teacher']);
+
+        allow create, update: if hasTenant(tenantId)
+          && isActiveRole(['admin', 'teacher'])
+          && request.resource.data.keys().hasAll(['sessionId', 'classId', 'createdAt', 'students'])
+          && request.resource.data.tenantId == tenantId;
+
         allow delete: if false;
       }
 
       match /attendance_receipts/{receiptId} {
         allow read: if hasTenant(tenantId)
           && (
-            hasAnyRole(['admin', 'teacher'])
+            isActiveRole(['admin', 'teacher'])
             || (hasRole('student') && resource.data.rollNumber == userData().rollNumber)
           );
 
-        allow create, update: if hasTenant(tenantId) && hasAnyRole(['admin', 'teacher']);
+        allow create, update: if hasTenant(tenantId) && isActiveRole(['admin', 'teacher']);
         allow delete: if false;
       }
 
       match /active_sessions/{classId} {
         allow read: if hasTenant(tenantId);
-        allow create, update: if hasTenant(tenantId) && hasAnyRole(['admin', 'teacher']);
-        allow delete: if false;
+        allow create, update: if hasTenant(tenantId) && isActiveRole(['admin', 'teacher']);
+        allow delete: if hasTenant(tenantId) && isActiveRole(['admin', 'teacher']);
       }
 
       match /classes/{classId} {
         allow read: if hasTenant(tenantId);
-        allow create, update: if hasTenant(tenantId) && hasAnyRole(['admin', 'teacher']);
+        allow create, update: if hasTenant(tenantId) && isActiveRole(['admin', 'teacher']);
         allow delete: if hasTenant(tenantId) && hasRole('admin');
       }
     }
