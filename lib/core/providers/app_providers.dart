@@ -1,5 +1,6 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/attendance/repository/attendance_repository.dart';
@@ -12,6 +13,7 @@ import '../../models/tenant_student.dart';
 import '../../services/ble_service.dart';
 import '../../services/firebase_service.dart';
 import '../../services/hive_service.dart';
+import '../utils/app_logger.dart';
 import '../../services/notification_service.dart';
 import '../../services/permission_service.dart';
 import '../../services/app_settings_service.dart';
@@ -62,9 +64,23 @@ final appBootstrapProvider = FutureProvider<void>((ref) async {
   await hive.init();
   await settings.init();
   await firebase.init();
-  await firebase.ensureDummyAdminAccount();
   await notifications.init();
-  await repository.startAutoSync();
+
+  // Demo account provisioning should never block production startup.
+  if (firebase.isEnabled && kDebugMode) {
+    try {
+      await firebase.ensureDummyAdminAccount();
+    } catch (error, stackTrace) {
+      AppLogger.firebaseError('Skipping dummy admin provisioning', error, stackTrace);
+    }
+  }
+
+  // Startup should continue even when cloud permissions are restrictive.
+  try {
+    await repository.startAutoSync();
+  } catch (error, stackTrace) {
+    AppLogger.attendanceError('Auto-sync startup deferred', error, stackTrace);
+  }
 });
 
 class AppRoleController extends StateNotifier<AppUserRole> {
