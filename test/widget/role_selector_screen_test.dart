@@ -15,7 +15,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Bluetooth Attendance Tracker'), findsOneWidget);
+    expect(find.text('BlueMark'), findsOneWidget);
     expect(find.text('Teacher (Host)'), findsOneWidget);
 
     final studentFinder = find.text('Student (Client)');
