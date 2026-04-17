@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/utils/app_logger.dart';
 import '../../../core/utils/date_formatters.dart';
 import '../../../models/app_runtime_settings.dart';
 import '../../../models/attendance_record.dart';
@@ -347,12 +348,12 @@ class _LiveAttendanceScreenState extends ConsumerState<LiveAttendanceScreen> {
         });
       });
 
-      _refreshTicker = Timer.periodic(const Duration(seconds: 3), (_) {
+      _refreshTicker = Timer.periodic(const Duration(seconds: AppConstants.scanRefreshIntervalSeconds), (_) {
         if (!mounted) {
           return;
         }
         setState(() {
-          _secondsElapsed += 3;
+          _secondsElapsed += AppConstants.scanRefreshIntervalSeconds;
           _detected = ref.read(bleServiceProvider).latestDetectedStudents;
           _excludedAutoRolls.removeWhere((roll) => !_detected.any((s) => s.rollNumber == roll));
         });
@@ -382,13 +383,16 @@ class _LiveAttendanceScreenState extends ConsumerState<LiveAttendanceScreen> {
       return;
     }
 
+    AppLogger.ble('Auto-recovering teacher scan');
     try {
       await ble.startTeacherScan(
         minRssiThreshold: settings.minRssi,
         staleSeconds: settings.staleSeconds,
         securityKey: settings.securityKey,
       );
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.bleError('Scan auto-recovery failed', e);
+    }
   }
 
   Future<void> _openReviewSheet() async {
@@ -648,6 +652,7 @@ class _LiveAttendanceScreenState extends ConsumerState<LiveAttendanceScreen> {
       ];
 
       final repository = ref.read(attendanceRepositoryProvider);
+      AppLogger.attendance('Saving attendance: session=$sessionId students=${finalStudents.length} audits=${auditLogs.length}');
       final record = await repository.saveAttendance(
         classRoom: widget.classRoom,
         sessionId: sessionId,
@@ -664,6 +669,7 @@ class _LiveAttendanceScreenState extends ConsumerState<LiveAttendanceScreen> {
         Navigator.of(context).pop();
       }
     } catch (error) {
+      AppLogger.attendanceError('Save attendance failed', error);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Unable to save attendance: $error')),

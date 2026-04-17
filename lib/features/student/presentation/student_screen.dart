@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/utils/app_logger.dart';
 import '../../../core/utils/date_formatters.dart';
 import '../../../models/active_attendance_session.dart';
 import '../../../models/app_user_role.dart';
@@ -543,9 +545,10 @@ class _StudentScreenState extends ConsumerState<StudentScreen> {
 
   void _startAdvertiseStatusPolling() {
     _advertiseStatusTimer?.cancel();
-    _advertiseStatusTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _refreshAdvertiseStatus();
-    });
+    _advertiseStatusTimer = Timer.periodic(
+      const Duration(seconds: AppConstants.healthPollIntervalSeconds),
+      (_) => _refreshAdvertiseStatus(),
+    );
     _refreshAdvertiseStatus();
   }
 
@@ -555,32 +558,40 @@ class _StudentScreenState extends ConsumerState<StudentScreen> {
   }
 
   Future<void> _refreshAdvertiseStatus() async {
-    final status = await ref.read(bleServiceProvider).getStudentAdvertisingStatus();
-    if (!mounted) {
-      return;
-    }
-
-    final profile = ref.read(studentProfileProvider);
-    final ready = ref.read(studentReadyProvider);
-    if (ready && profile != null && !status.isAdvertising) {
-      _healthFailureStreak += 1;
-      if (_healthFailureStreak >= 2) {
-        try {
-          final settings = await ref.read(appSettingsServiceProvider).getSettings();
-          await ref.read(bleServiceProvider).startStudentAdvertising(
-                profile,
-                securityKey: settings.securityKey,
-              );
-          _healthFailureStreak = 0;
-        } catch (_) {}
+    try {
+      final status = await ref.read(bleServiceProvider).getStudentAdvertisingStatus();
+      if (!mounted) {
+        return;
       }
-    } else if (status.isAdvertising) {
-      _healthFailureStreak = 0;
-    }
 
-    setState(() {
-      _advertiseStatus = status;
-    });
+      final profile = ref.read(studentProfileProvider);
+      final ready = ref.read(studentReadyProvider);
+      if (ready && profile != null && !status.isAdvertising) {
+        _healthFailureStreak += 1;
+        AppLogger.ble('Advertise health check failed ($_healthFailureStreak/${AppConstants.healthFailureThreshold})');
+        if (_healthFailureStreak >= AppConstants.healthFailureThreshold) {
+          try {
+            final settings = await ref.read(appSettingsServiceProvider).getSettings();
+            await ref.read(bleServiceProvider).startStudentAdvertising(
+                  profile,
+                  securityKey: settings.securityKey,
+                );
+            _healthFailureStreak = 0;
+            AppLogger.ble('Auto-healed BLE advertising');
+          } catch (e) {
+            AppLogger.bleError('Auto-heal failed', e);
+          }
+        }
+      } else if (status.isAdvertising) {
+        _healthFailureStreak = 0;
+      }
+
+      setState(() {
+        _advertiseStatus = status;
+      });
+    } catch (e) {
+      AppLogger.bleError('_refreshAdvertiseStatus failed', e);
+    }
   }
 
   void _bindAttendanceStatus(String rollNumber) {

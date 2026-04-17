@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 
+import '../../../core/utils/app_logger.dart';
 import '../../../models/attendance_record.dart';
 import '../../../models/class_room.dart';
 import '../../../models/student_attendance_status.dart';
@@ -41,10 +42,12 @@ class AttendanceRepository {
   StreamSubscription<List<ConnectivityResult>>? _syncSubscription;
 
   Future<void> startAutoSync() async {
+    AppLogger.attendance('Starting auto-sync listener');
     await syncPendingRecords();
     _syncSubscription ??= _connectivity.onConnectivityChanged.listen((results) async {
       final hasNetwork = results.any((result) => result != ConnectivityResult.none);
       if (hasNetwork) {
+        AppLogger.attendance('Network restored – syncing pending records');
         await syncPendingRecords();
       }
     });
@@ -163,6 +166,7 @@ class AttendanceRepository {
       synced: false,
     );
 
+    AppLogger.attendance('saveAttendance: id=$id session=$sessionId students=${resolvedStudents.length} audits=${auditLogs.length}');
     await _hive.saveAttendanceRecord(record);
     await endSession(classRoom.id);
     await syncPendingRecords();
@@ -186,19 +190,25 @@ class AttendanceRepository {
   Future<void> syncPendingRecords() async {
     final pending = _hive.getPendingAttendance();
     if (pending.isNotEmpty) {
+      AppLogger.attendance('syncPendingRecords: ${pending.length} record(s) pending');
       for (final record in pending) {
         try {
           final cloudId = await _firebase.syncAttendanceRecord(record);
           if (cloudId != null) {
             await _hive.markAttendanceSynced(record.id, cloudDocId: cloudId);
+            AppLogger.attendance('Synced record ${record.id} → cloud=$cloudId');
           }
-        } catch (_) {}
+        } catch (e) {
+          AppLogger.attendanceError('Failed to sync record ${record.id}', e);
+        }
       }
     }
 
     try {
       await refreshStudentDirectory();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.attendanceError('refreshStudentDirectory failed during sync', e);
+    }
   }
 
   Future<List<StudentAttendanceStatus>> getStudentTimeline(

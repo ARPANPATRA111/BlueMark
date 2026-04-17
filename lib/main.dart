@@ -11,6 +11,12 @@ import 'features/student/presentation/student_screen.dart';
 import 'features/teacher/presentation/teacher_home_screen.dart';
 import 'models/app_user_role.dart';
 
+bool _isFirestorePermissionDenied(Object error) {
+  final text = error.toString().toLowerCase();
+  return text.contains('cloud_firestore/permission-denied') ||
+      text.contains('permission-denied');
+}
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const ProviderScope(child: BluetoothAttendanceApp()));
@@ -32,7 +38,9 @@ class BluetoothAttendanceApp extends ConsumerWidget {
       home: bootstrap.when(
         data: (_) => const _RoleRouter(),
         loading: () => const _LoadingScreen(),
-        error: (error, _) => _BootstrapErrorScreen(error: error),
+        error: (error, _) => _isFirestorePermissionDenied(error)
+            ? const _RoleRouter()
+            : _BootstrapErrorScreen(error: error),
       ),
     );
   }
@@ -88,11 +96,15 @@ class _RoleRouter extends ConsumerWidget {
             }
           },
           loading: () => const _LoadingScreen(),
-          error: (error, _) => _BootstrapErrorScreen(error: error),
+          error: (error, _) => _isFirestorePermissionDenied(error)
+              ? const _ProfileMissingScreen()
+              : _BootstrapErrorScreen(error: error),
         );
       },
       loading: () => const _LoadingScreen(),
-      error: (error, _) => _BootstrapErrorScreen(error: error),
+      error: (error, _) => _isFirestorePermissionDenied(error)
+          ? const AuthScreen()
+          : _BootstrapErrorScreen(error: error),
     );
   }
 }

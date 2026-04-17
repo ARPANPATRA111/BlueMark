@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 
 import '../core/constants/app_constants.dart';
+import '../core/utils/app_logger.dart';
 import '../models/active_attendance_session.dart';
 import '../models/app_user.dart';
 import '../models/app_user_role.dart';
@@ -60,11 +60,12 @@ class FirebaseService {
     try {
       await Firebase.initializeApp();
       _enabled = true;
+      AppLogger.firebase('Firebase initialized successfully');
     } on FirebaseException catch (error, stackTrace) {
-      debugPrint('Firebase init failed: ${error.code} ${error.message}\n$stackTrace');
+      AppLogger.firebaseError('Firebase init failed: ${error.code}', error, stackTrace);
       _enabled = false;
     } catch (error, stackTrace) {
-      debugPrint('Firebase init skipped: $error\n$stackTrace');
+      AppLogger.firebaseError('Firebase init skipped', error, stackTrace);
       _enabled = false;
     }
   }
@@ -109,6 +110,10 @@ class FirebaseService {
       if (error.code == 'network-request-failed') {
         return;
       }
+    } on FirebaseException catch (error, stackTrace) {
+      AppLogger.firebaseError('Dummy admin provisioning skipped', error, stackTrace);
+    } catch (error, stackTrace) {
+      AppLogger.firebaseError('Dummy admin provisioning failed', error, stackTrace);
     }
   }
 
@@ -136,12 +141,14 @@ class FirebaseService {
       throw Exception('Firebase is not configured on this build.');
     }
 
+    AppLogger.firebase('signIn: ${email.trim()}');
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
     } on FirebaseAuthException catch (error) {
+      AppLogger.firebaseError('signIn failed: ${error.code}', error);
       throw Exception(_friendlyAuthMessage(error, isRegistration: false));
     }
   }
@@ -212,7 +219,7 @@ class FirebaseService {
     if (!_enabled) {
       return;
     }
-
+    AppLogger.firebase('signOut');
     await FirebaseAuth.instance.signOut();
   }
 
@@ -370,8 +377,11 @@ class FirebaseService {
   Future<String?> syncAttendanceRecord(AttendanceRecord record) async {
     final context = await _contextOrNull();
     if (context == null) {
+      AppLogger.firebase('syncAttendanceRecord skipped – no Firebase context');
       return null;
     }
+
+    AppLogger.firebase('syncAttendanceRecord: id=${record.id} students=${record.presentCount}');
 
     final collection = _tenantCollection(context.tenantId, AppConstants.attendanceCollection);
     final docRef = record.cloudDocId != null && record.cloudDocId!.isNotEmpty
@@ -457,7 +467,7 @@ class FirebaseService {
       }, SetOptions(merge: true));
       pendingWrites += 1;
 
-      if (pendingWrites >= 300) {
+      if (pendingWrites >= AppConstants.firestoreBatchSize) {
         await flushBatch();
       }
     }

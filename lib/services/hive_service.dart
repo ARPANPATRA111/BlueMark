@@ -1,5 +1,6 @@
 import 'package:hive_flutter/hive_flutter.dart';
 
+import '../core/utils/app_logger.dart';
 import '../models/app_user_role.dart';
 import '../models/attendance_record.dart';
 import '../models/class_room.dart';
@@ -49,6 +50,7 @@ class HiveService {
     }
 
     _initialized = true;
+    AppLogger.hive('Hive initialized – 5 boxes opened');
   }
 
   AppUserRole getRole() {

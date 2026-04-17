@@ -34,7 +34,7 @@ class RoleSelectorScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Bluetooth Attendance Tracker',
+                      'BlueMark',
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 8),

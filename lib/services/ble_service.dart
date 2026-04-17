@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../core/constants/app_constants.dart';
+import '../core/utils/app_logger.dart';
 import 'ble_payload_codec.dart';
 import '../models/student_profile.dart';
 
@@ -105,7 +106,6 @@ class BleService {
   int _minRssiThreshold = -92;
   int _staleSeconds = AppConstants.detectionStaleSeconds;
   String _securityKey = AppConstants.defaultSecurityKey;
-  static const int _maxTrackedStudents = 300;
 
   Stream<List<DetectedStudent>> get detectedStudentsStream => _detectedController.stream;
 
@@ -138,10 +138,12 @@ class BleService {
       return;
     }
 
+    AppLogger.ble('Bluetooth adapter state: $current – attempting to enable');
     if (Platform.isAndroid) {
       try {
         await FlutterBluePlus.turnOn(timeout: 8);
-      } catch (_) {
+      } catch (e) {
+        AppLogger.bleError('FlutterBluePlus.turnOn failed', e);
         throw BleException('Bluetooth is off. Please turn on Bluetooth and try again.');
       }
     }
@@ -153,10 +155,11 @@ class BleService {
   }
 
   Future<void> startTeacherScan({
-    int minRssiThreshold = -92,
+    int minRssiThreshold = AppConstants.defaultMinRssi,
     int staleSeconds = AppConstants.detectionStaleSeconds,
     String securityKey = AppConstants.defaultSecurityKey,
   }) async {
+    AppLogger.ble('startTeacherScan: rssi=$minRssiThreshold stale=${staleSeconds}s');
     await ensureBluetoothEnabled();
     _minRssiThreshold = minRssiThreshold;
     _staleSeconds = staleSeconds;
@@ -183,13 +186,17 @@ class BleService {
     _scanSubscription = FlutterBluePlus.scanResults.listen(
       _onScanResults,
       onError: (Object error, StackTrace stackTrace) {
+        AppLogger.bleError('Scan stream error', error, stackTrace);
         _detectedController.addError(error, stackTrace);
       },
     );
 
-    _cleanupTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      _removeStaleDetections();
-    });
+    _cleanupTimer = Timer.periodic(
+      const Duration(seconds: AppConstants.staleCleanupIntervalSeconds),
+      (_) => _removeStaleDetections(),
+    );
+
+    AppLogger.ble('Teacher scan started successfully');
   }
 
   void _onScanResults(List<ScanResult> results) {
@@ -220,13 +227,14 @@ class BleService {
         sourceId: result.device.remoteId.str,
       );
 
-      if (_detectedByRoll.length > _maxTrackedStudents) {
+      if (_detectedByRoll.length > AppConstants.maxTrackedStudents) {
         final oldest = _detectedByRoll.entries.toList(growable: false)
           ..sort((a, b) => a.value.lastSeen.compareTo(b.value.lastSeen));
-        final removeCount = _detectedByRoll.length - _maxTrackedStudents;
+        final removeCount = _detectedByRoll.length - AppConstants.maxTrackedStudents;
         for (var i = 0; i < removeCount; i++) {
           _detectedByRoll.remove(oldest[i].key);
         }
+        AppLogger.ble('Evicted $removeCount stale entries (cap=${AppConstants.maxTrackedStudents})');
       }
     }
 
@@ -310,6 +318,7 @@ class BleService {
   }
 
   Future<void> stopTeacherScan() async {
+    AppLogger.ble('stopTeacherScan: batches=$_scanBatches packets=$_advertisementPackets detected=${_detectedByRoll.length}');
     await _scanSubscription?.cancel();
     _scanSubscription = null;
     _cleanupTimer?.cancel();
@@ -327,6 +336,7 @@ class BleService {
     await ensureBluetoothEnabled();
     _securityKey = securityKey;
 
+    AppLogger.ble('startStudentAdvertising: roll=${profile.rollNumber}');
     try {
       await _advertiseChannel.invokeMethod<void>('startAdvertising', <String, dynamic>{
         'rollNumber': profile.rollNumber.toUpperCase(),
@@ -335,10 +345,11 @@ class BleService {
         'payload': BlePayloadCodec.encodeRoll(profile.rollNumber, secret: _securityKey),
       });
 
-      for (var i = 0; i < 6; i++) {
+      for (var i = 0; i < AppConstants.advertiseRetryAttempts; i++) {
         final status = await getStudentAdvertisingStatus();
         if (status.isAdvertising) {
           _isStudentAdvertising = true;
+          AppLogger.ble('Student advertising confirmed active after ${i + 1} poll(s)');
           return;
         }
 
@@ -346,7 +357,7 @@ class BleService {
           throw BleException(status.lastError ?? 'Broadcast failed to start.');
         }
 
-        await Future<void>.delayed(const Duration(milliseconds: 400));
+        await Future<void>.delayed(const Duration(milliseconds: AppConstants.advertiseRetryDelayMs));
       }
 
       final latest = await getStudentAdvertisingStatus();
@@ -388,9 +399,11 @@ class BleService {
   }
 
   Future<void> stopStudentAdvertising() async {
+    AppLogger.ble('stopStudentAdvertising');
     try {
       await _advertiseChannel.invokeMethod<void>('stopAdvertising');
-    } catch (_) {
+    } catch (e) {
+      AppLogger.bleError('stopStudentAdvertising failed', e);
     } finally {
       _isStudentAdvertising = false;
     }
